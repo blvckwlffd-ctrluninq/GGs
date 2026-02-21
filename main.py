@@ -3,7 +3,7 @@ import aiohttp
 import random
 import string
 
-NAMES = 1000
+NAMES = 1
 LENGTH = 4
 FILE = "valid.txt"
 BIRTHDAY = "1999-04-20"
