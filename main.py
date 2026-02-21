@@ -1,64 +1,60 @@
-import requests
+import asyncio
+import aiohttp
 import random
 import string
-import time
 
-# Constants
-NAMES = 1000  # Amount of usernames to save
-LENGTH = 4  # Length of usernames
-FILE = 'valid.txt'  # Automatically creates file
-BIRTHDAY = '1999-04-20'  # User's birthday for validation
+NAMES = 1000
+LENGTH = 4
+FILE = "valid.txt"
+BIRTHDAY = "1999-04-20"
+CONCURRENT_REQUESTS = 10  # adjust (5–20 is safe)
 
-# Color formatting for terminal output
 class bcolors:
-    HEADER = '\033[95m'
     OKBLUE = '\033[94m'
-    GRAY = '\033[90m'
-    WARNING = '\033[93m'
     FAIL = '\033[91m'
     ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
-def success(username):
-    print(f"{bcolors.OKBLUE}[{found}/{NAMES}] [+] Found Username: {username} {bcolors.ENDC}")
-    with open(FILE, 'a+') as f:
-        f.write(f"{username}\n")
-
-def taken(username):
-    print(f'{bcolors.FAIL}[-] {username} is taken {bcolors.ENDC}')
+found = 0
+lock = asyncio.Lock()
 
 def make_username(length):
-    letters = string.ascii_lowercase + string.digits
-    return ''.join(random.choice(letters) for _ in range(length))
+    chars = string.ascii_lowercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
 
-def check_username(username):
-    url = f'https://auth.roblox.com/v1/usernames/validate?request.username={username}&request.birthday={BIRTHDAY}'
-    response = requests.get(url, timeout=5)  # Set a timeout of 5 seconds
-    response.raise_for_status()  # Raise an error for bad responses
-    return response.json().get('code')
+async def check_username(session, username):
+    url = f"https://auth.roblox.com/v1/usernames/validate?request.username={username}&request.birthday={BIRTHDAY}"
+    async with session.get(url, timeout=5) as resp:
+        data = await resp.json()
+        return data.get("code")
 
-# Check usernames loop
-found = 0
-while found < NAMES:
-    try:
+async def worker(session):
+    global found
+    while found < NAMES:
         username = make_username(LENGTH)
-        code = check_username(username)
-        
-        if code == 0:
-            found += 1
-            success(username)
-        else:
-            taken(username)
-                
-    except requests.exceptions.RequestException as e:
-        print('Network error:', e)
-    except KeyboardInterrupt:
-        print("Script interrupted. Exiting...")
-        break
-    except Exception as e:
-        print('Error:', e)
+        try:
+            code = await check_username(session, username)
 
-    time.sleep(0.1)  # Increased sleep time to avoid overwhelming the API
+            async with lock:
+                if found >= NAMES:
+                    return
 
-print(f"{bcolors.OKBLUE}[!] Finished {bcolors.ENDC}")
+                if code == 0:
+                    found += 1
+                    print(f"{bcolors.OKBLUE}[{found}/{NAMES}] [+] Found: {username}{bcolors.ENDC}")
+                    with open(FILE, "a+") as f:
+                        f.write(username + "\n")
+                else:
+                    print(f"{bcolors.FAIL}[-] Taken: {username}{bcolors.ENDC}")
+
+        except Exception as e:
+            print("Error:", e)
+
+async def main():
+    connector = aiohttp.TCPConnector(limit=CONCURRENT_REQUESTS)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        tasks = [worker(session) for _ in range(CONCURRENT_REQUESTS)]
+        await asyncio.gather(*tasks)
+
+    print(f"{bcolors.OKBLUE}[!] Finished{bcolors.ENDC}")
+
+asyncio.run(main())
