@@ -3,8 +3,8 @@ import aiohttp
 import random
 import string
 
-NAMES = 1
-LENGTH = 4
+NAMES = 5
+LENGTH = 5
 FILE = "valid.txt"
 BIRTHDAY = "1999-04-20"
 CONCURRENT_REQUESTS = 10  # adjust (5–20 is safe)
